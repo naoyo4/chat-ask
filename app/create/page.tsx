@@ -9,6 +9,10 @@ export default function CreateSurveyPage() {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [questions, setQuestions] = useState<Question[]>([]);
+    const [importUrl, setImportUrl] = useState('');
+    const [isImporting, setIsImporting] = useState(false);
+    const [importError, setImportError] = useState('');
+    const [importWarnings, setImportWarnings] = useState<string[]>([]);
 
     const addQuestion = (type: QuestionType) => {
         const newQuestion: Question = {
@@ -43,6 +47,57 @@ export default function CreateSurveyPage() {
         newQuestions.forEach((q, i) => q.order = i);
         setQuestions(newQuestions);
     };
+
+    const importFromGoogleForms = async () => {
+        if (!importUrl) {
+            setImportError('URLを入力してください');
+            return;
+        }
+
+        setIsImporting(true);
+        setImportError('');
+        setImportWarnings([]);
+
+        try {
+            const response = await fetch('/api/import-form', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url: importUrl }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                setImportError(data.error || 'インポートに失敗しました');
+                if (data.warnings) {
+                    setImportWarnings(data.warnings);
+                }
+                return;
+            }
+
+            if (data.success && data.survey) {
+                // Update form with imported data
+                setTitle(data.survey.title || '');
+                setDescription(data.survey.description || '');
+                setQuestions(data.survey.questions || []);
+
+                if (data.warnings && data.warnings.length > 0) {
+                    setImportWarnings(data.warnings);
+                }
+
+                // Clear the URL input
+                setImportUrl('');
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            setImportError('インポート中にエラーが発生しました');
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
 
     const saveSurvey = async () => {
         if (!title || questions.length === 0) {
@@ -85,6 +140,65 @@ export default function CreateSurveyPage() {
                     <p className="text-gray-600 dark:text-gray-400">
                         選択式質問を作成してください。回答後、AIが自動的に深掘りインタビューを行います。
                     </p>
+                </div>
+
+                {/* Google Forms Import */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg shadow-md p-6 mb-6 border border-blue-200 dark:border-blue-800">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                        📋 Google Formからインポート
+                    </h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        既存のGoogle Formsからアンケートをインポートできます（ラジオボタン・チェックボックスのみ対応）
+                    </p>
+
+                    <div className="space-y-3">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={importUrl}
+                                onChange={(e) => {
+                                    setImportUrl(e.target.value);
+                                    setImportError('');
+                                }}
+                                placeholder="https://docs.google.com/forms/d/e/..."
+                                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                disabled={isImporting}
+                            />
+                            <button
+                                onClick={importFromGoogleForms}
+                                disabled={isImporting || !importUrl}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {isImporting ? (
+                                    <>
+                                        <span className="animate-spin">⏳</span>
+                                        インポート中...
+                                    </>
+                                ) : (
+                                    <>
+                                        📥 インポート
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {importError && (
+                            <div className="p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg text-red-700 dark:text-red-300 text-sm">
+                                ❌ {importError}
+                            </div>
+                        )}
+
+                        {importWarnings.length > 0 && (
+                            <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-lg text-yellow-800 dark:text-yellow-300 text-sm">
+                                <div className="font-semibold mb-1">⚠️ 警告:</div>
+                                <ul className="list-disc list-inside space-y-1">
+                                    {importWarnings.map((warning, index) => (
+                                        <li key={index}>{warning}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Survey Info */}
